@@ -6,10 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "ag-auto-accept"
 version = "0.1.0"
 description = "A lightweight tool to automatically accept antigravity windows."
-authors = [{name = "RyosukeMondo"}]
-dependencies = [
-    "pywinauto",
-]
+authors = [{ name = "RyosukeMondo" }]
+dependencies = ["pywinauto", "platformdirs"]
 
 [project.scripts]
 ag-accept = "ag_auto_accept.main:main"
