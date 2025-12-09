@@ -9,6 +9,7 @@ import os
 import platformdirs
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
+import ctypes
 
 APP_NAME = "ag-auto-accept"
 APP_AUTHOR = "RyosukeMondo"
@@ -290,6 +291,10 @@ class AutoAccepter:
                             
                             if has_accept:
                                 self.log(f"Refocusing and sending key to '{title}'")
+                                
+                                # Save currently focused window
+                                previous_focus_hwnd = ctypes.windll.user32.GetForegroundWindow()
+
                                 try:
                                     w.set_focus()
                                 except Exception as focus_err:
@@ -297,6 +302,16 @@ class AutoAccepter:
                                 
                                 w.type_keys('%{ENTER}', with_spaces=True)
                                 self.log("Success: Sent Alt+Enter")
+
+                                # Restore focus to previous window
+                                if previous_focus_hwnd:
+                                    try:
+                                        # Use AttachThreadInput to ensure we can switch focus back if needed
+                                        # But simple SetForegroundWindow might work if we just had focus
+                                        ctypes.windll.user32.SetForegroundWindow(previous_focus_hwnd)
+                                        # self.log("Restored focus to previous window.")
+                                    except Exception as e:
+                                        self.log(f"Failed to restore focus: {e}")
                             else:
                                 self.log(f"Skipping '{title}': Target text not found.")
                             
