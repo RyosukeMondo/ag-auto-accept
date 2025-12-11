@@ -12,8 +12,21 @@ from ag_accept.services.text_query_service import TextQueryService
 from ag_accept.services.scheduler_service import SchedulerService
 from ag_accept.services.debug_service import DebugService
 
+# State Constants
+STATE_IDLE = "IDLE"
+STATE_SEARCHING_WINDOW = "SEARCHING_WINDOW"
+STATE_WINDOW_FOUND = "WINDOW_FOUND"
+STATE_CHECKING_CONTEXT = "CHECKING_CONTEXT"
+STATE_CONTEXT_MATCHED = "CONTEXT_MATCHED" 
+STATE_CONTEXT_FAILED = "CONTEXT_FAILED"
+STATE_SEARCHING_BUTTON = "SEARCHING_BUTTON"
+STATE_BUTTON_FOUND = "BUTTON_FOUND"
+STATE_BUTTON_FAILED = "BUTTON_FAILED"
+STATE_ACTION_SUCCESS = "ACTION_SUCCESS"
+STATE_ACTION_FAILED = "ACTION_FAILED"
+
 class AutomationStrategy(Protocol):
-    def run(self, stop_event: threading.Event, snapshot_event: threading.Event, config_manager: Any, logger: Callable[[str], None], debug: bool = False):
+    def run(self, stop_event: threading.Event, snapshot_event: threading.Event, config_manager: Any, logger: Callable[[str], None], state_callback: Callable[[str], None] = None, debug: bool = False):
         """Run the automation loop."""
         ...
 
@@ -24,7 +37,7 @@ class IdeStrategy:
         self.text_service = text_service
         self.debug_service = debug_service
 
-    def run(self, stop_event, snapshot_event, config_manager, logger, debug=False):
+    def run(self, stop_event, snapshot_event, config_manager, logger, state_callback=None, debug=False):
         pythoncom.CoInitialize()
         try:
             target_title_part = config_manager.get("target_window_title", "Antigravity")
@@ -46,21 +59,29 @@ class IdeStrategy:
                     windows = self.window_service.get_all_windows(exclude_titles=["Ag-Accept", "Antigravity Monitor"])
                     
                     for window in windows:
+                        if state_callback: state_callback(STATE_SEARCHING_WINDOW)
                         name = window.Name
                         if target_title_part in name:
+                            if state_callback: state_callback(STATE_WINDOW_FOUND)
                             # Use TextQueryService for recursive search
+                            if state_callback: state_callback(STATE_CHECKING_CONTEXT)
                             if self.text_service.has_text_recursive(window, search_texts):
+                                if state_callback: state_callback(STATE_CONTEXT_MATCHED)
                                 logger(f"Found target text in '{name}'. Activating...")
                                 
                                 self.window_service.focus_window(window)
                                 
                                 try:
-                                    # Send keys (still using control directly for now as simple method)
-                                    window.SendKeys('%{Enter}')
-                                    logger("Sent Alt+Enter")
+                                    if state_callback: state_callback(STATE_ACTION_SUCCESS) # Treat as success event though just preparing
+                                    # Send keys - Trying explicit {Alt}{Enter} instead of %{Enter}
+                                    window.SendKeys('{Alt}{Enter}')
+                                    logger("Sent {Alt}{Enter}")
                                     time.sleep(0.5)
                                 except Exception as e:
+                                    if state_callback: state_callback(STATE_ACTION_FAILED)
                                     logger(f"SendKeys error: {e}")
+                            else:
+                                if state_callback: state_callback(STATE_CONTEXT_FAILED)
 
                 except Exception as e:
                     logger(f"Loop error: {e}")
@@ -78,7 +99,7 @@ class AgentManagerStrategy:
         self.debug_service = debug_service
         self.scheduler = SchedulerService() # Not fully replacing main loop yet, but ready
 
-    def run(self, stop_event, snapshot_event, config_manager, logger, debug=False):
+    def run(self, stop_event, snapshot_event, config_manager, logger, state_callback=None, debug=False):
         pythoncom.CoInitialize()
         try:
             target_title_part = config_manager.get("target_window_title", "Antigravity")
@@ -121,20 +142,25 @@ class AgentManagerStrategy:
                             target_window = None
 
                     if not target_window:
+                        if state_callback: state_callback(STATE_SEARCHING_WINDOW)
                         target_window = self.window_service.find_window_by_title(
                             target_title_part, 
                             exclude_titles=["Ag-Accept", "Antigravity Monitor"]
                         )
                         
                         if target_window:
+                            if state_callback: state_callback(STATE_WINDOW_FOUND)
                             logger(f"Locked on to window: '{target_window.Name}'")
                         else:
                             stop_event.wait(interval)
                             continue
+                    else:
+                        if state_callback: state_callback(STATE_WINDOW_FOUND)
 
                     # 2. Check Context (Recursive Search - Fixes "Target text not found")
                     # Previously we used a custom verify_context, now we use the service which does recursive
                     context_found = False
+                    if state_callback: state_callback(STATE_CHECKING_CONTEXT)
                     if not context_texts:
                         context_found = True
                     else:
@@ -148,14 +174,19 @@ class AgentManagerStrategy:
                             pass
 
                     if not context_found:
+                        if state_callback: state_callback(STATE_CONTEXT_FAILED)
                         # Don't log spam if waiting
                         stop_event.wait(interval)
                         continue
+                    
+                    if state_callback: state_callback(STATE_CONTEXT_MATCHED)
 
                     # 3. Look for Button
+                    if state_callback: state_callback(STATE_SEARCHING_BUTTON)
                     found_button = self.text_service.find_button_with_text(target_window, search_texts)
 
                     if found_button:
+                        if state_callback: state_callback(STATE_BUTTON_FOUND)
                         btn_name = found_button.Name
                         logger(f"Found button: '{btn_name}'")
                         
@@ -165,12 +196,15 @@ class AgentManagerStrategy:
                         try:
                             found_button.Invoke()
                             logger(f"Clicked '{btn_name}' (Invoke)")
+                            if state_callback: state_callback(STATE_ACTION_SUCCESS)
                         except:
                             try:
                                 found_button.Click()
                                 logger(f"Clicked '{btn_name}' (Click)")
+                                if state_callback: state_callback(STATE_ACTION_SUCCESS)
                             except Exception as e:
                                 logger(f"Click failed: {e}")
+                                if state_callback: state_callback(STATE_ACTION_FAILED)
                         
                         # Back Focus ? (User asked for "back focus", interpreting as restore)
                         # self.window_service.restore_previous_focus() 
@@ -181,6 +215,7 @@ class AgentManagerStrategy:
                         self.window_service.restore_previous_focus()
 
                     else:
+                        if state_callback: state_callback(STATE_BUTTON_FAILED)
                         # Button not found
                         pass
 

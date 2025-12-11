@@ -36,7 +36,7 @@ class AutomationService:
         self.snapshot_event = threading.Event()
         self.is_running_flag = False
 
-    def start_automation(self, mode: str, logger: Callable[[str], None]) -> None:
+    def start_automation(self, mode: str, logger: Callable[[str], None], state_callback: Optional[Callable[[str], None]] = None) -> None:
         if self.is_running_flag:
             return
 
@@ -60,7 +60,7 @@ class AutomationService:
 
         def run_target():
              try:
-                 strategy.run(self.stop_event, self.snapshot_event, self.config, logger, debug_enabled)
+                 strategy.run(self.stop_event, self.snapshot_event, self.config, logger, state_callback, debug_enabled)
              except Exception as e:
                  logger(f"Automation Thread Error: {e}")
              finally:

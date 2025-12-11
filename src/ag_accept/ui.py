@@ -10,6 +10,110 @@ import matplotlib.pyplot as plt
 from injector import inject
 from ag_accept.services.config_service import ConfigService
 from ag_accept.services.automation_service import AutomationService
+from ag_accept.automation import (
+    STATE_IDLE, STATE_SEARCHING_WINDOW, STATE_WINDOW_FOUND,
+    STATE_CHECKING_CONTEXT, STATE_CONTEXT_MATCHED, STATE_CONTEXT_FAILED,
+    STATE_SEARCHING_BUTTON, STATE_BUTTON_FOUND, STATE_BUTTON_FAILED,
+    STATE_ACTION_SUCCESS, STATE_ACTION_FAILED
+)
+
+class VisualStateManager:
+    def __init__(self, root, parent_frame):
+        self.root = root
+        self.canvas = tk.Canvas(parent_frame, height=80, bg="#2b2b2b", highlightthickness=0)
+        self.canvas.pack(fill="x", padx=5, pady=5)
+        
+        self.nodes = {}
+        self.links = {}
+        
+        self.setup_pipeline()
+        
+    def setup_pipeline(self):
+        # Define nodes: (x, y, label)
+        # Using relative layout logic
+        y = 40
+        spacing = 100
+        start_x = 50
+        
+        node_defs = [
+            ("window", "Window", start_x),
+            ("context", "Context", start_x + spacing),
+            ("button", "Button", start_x + spacing * 2),
+            ("action", "Action", start_x + spacing * 3)
+        ]
+        
+        # Draw links first
+        for i in range(len(node_defs) - 1):
+            key1, _, x1 = node_defs[i]
+            key2, _, x2 = node_defs[i+1]
+            link = self.canvas.create_line(x1+20, y, x2-20, y, fill="#555555", width=2)
+            self.links[f"{key1}-{key2}"] = link
+            
+        # Draw nodes
+        for key, label, x in node_defs:
+            # Circle
+            r = 20
+            oval = self.canvas.create_oval(x-r, y-r, x+r, y+r, fill="#555555", outline="")
+            # Text
+            text = self.canvas.create_text(x, y+30, text=label, fill="gray", font=("Arial", 9))
+            self.nodes[key] = (oval, text)
+
+    def set_color(self, node_key, color):
+        if node_key in self.nodes:
+            oval, _ = self.nodes[node_key]
+            self.canvas.itemconfig(oval, fill=color)
+
+    def reset(self):
+        for key in self.nodes:
+            self.set_color(key, "#555555")
+
+    def update_state(self, state):
+        # Update UI in main thread
+        if threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.update_state(state))
+            return
+            
+        # Logic to map state to visual colors
+        # Colors: Grey (#555555) -> Idle/Pending
+        #         Yellow (#FFD700) -> Searching/Working
+        #         Green (#32CD32) -> Success
+        #         Red (#FF4500) -> Fail
+        
+        if state == STATE_IDLE or state == STATE_SEARCHING_WINDOW:
+            self.reset()
+            if state == STATE_SEARCHING_WINDOW:
+                self.set_color("window", "#FFD700") # Yellow
+                
+        elif state == STATE_WINDOW_FOUND:
+            self.set_color("window", "#32CD32") # Green
+            
+        elif state == STATE_CHECKING_CONTEXT:
+            self.set_color("context", "#FFD700")
+
+        elif state == STATE_CONTEXT_MATCHED:
+            self.set_color("context", "#32CD32")
+            
+        elif state == STATE_CONTEXT_FAILED:
+            self.set_color("context", "#FF4500") # Red
+            self.set_color("button", "#555555") # Reset downstream
+            
+        elif state == STATE_SEARCHING_BUTTON:
+            self.set_color("button", "#FFD700")
+            
+        elif state == STATE_BUTTON_FOUND:
+            self.set_color("button", "#32CD32")
+            
+        elif state == STATE_BUTTON_FAILED:
+            self.set_color("button", "#FF4500")
+            
+        elif state == STATE_ACTION_SUCCESS:
+            self.set_color("action", "#32CD32")
+            # Flash effect or something?
+            
+        elif state == STATE_ACTION_FAILED:
+            self.set_color("action", "#FF4500")
+
+
 
 class AutoAccepterUI:
     @inject
@@ -39,6 +143,14 @@ class AutoAccepterUI:
         
         self.setup_dashboard(self.tab_dashboard)
         self.setup_telemetry(self.tab_telemetry)
+
+    def setup_state_viz(self, parent):
+        viz_frame = ctk.CTkFrame(parent)
+        viz_frame.pack(fill="x", padx=5, pady=5)
+        
+        ctk.CTkLabel(viz_frame, text="Pipeline State").pack(anchor="w", padx=5)
+        
+        self.visual_state_manager = VisualStateManager(self.root, viz_frame)
 
     def setup_dashboard(self, parent):
         # Top Control Panel
@@ -71,6 +183,9 @@ class AutoAccepterUI:
         
         self.snapshot_btn = ctk.CTkButton(action_frame, text="Snapshot", command=self.trigger_snapshot, state="disabled")
         self.snapshot_btn.pack(side="left", padx=5)
+
+        # State Viz Area
+        self.setup_state_viz(parent)
 
         # Logs Area
         log_frame = ctk.CTkFrame(parent)
@@ -114,7 +229,7 @@ class AutoAccepterUI:
 
     def setup_telemetry(self, parent):
         # Matplotlib Graph
-        self.fig = Figure(figsize=(5, 4), dpi=100)
+        self.fig = Figure(figsize=(5, 4), dpi=100, constrained_layout=True)
         self.ax = self.fig.add_subplot(111)
         self.ax.set_title("Automation Performance (Events/min)")
         self.ax.set_facecolor('#2b2b2b')
@@ -134,18 +249,22 @@ class AutoAccepterUI:
         self.line, = self.ax.plot(self.x_data, self.y_data, 'c-') # Cyan line
 
         # Remove internal margins
-        self.fig.tight_layout()
+        # self.fig.tight_layout() # using constrained_layout=True instead
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=parent)
         self.canvas.draw()
         
-        # Use grid for centering within the tab frame
-        # Make the parent (tab frame) center its content
-        parent.grid_columnconfigure(0, weight=1)
-        parent.grid_rowconfigure(0, weight=1)
+        # Use pack for better fill and centering
+        tk_widget = self.canvas.get_tk_widget()
+        tk_widget.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Grid the canvas filling space
-        self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        # Bind to configure event to fix initial layout issues
+        tk_widget.bind("<Configure>", self.on_telemetry_resize)
+
+    def on_telemetry_resize(self, event):
+        # Force a redraw when the widget is resized or shown
+        # This fixes the issue where centering is off until window resize
+        self.canvas.draw()
         
     def start_telemetry_loop(self):
         # Update graph every second (mock for now, or hook to service stats)
@@ -230,7 +349,10 @@ class AutoAccepterUI:
         debug = self.debug_var.get()
         self.log(f"Started (Mode: {mode}, Interval: {interval}s)")
         
-        self.automation_service.start_automation(mode, self.log)
+
+        
+        # Pass state callback
+        self.automation_service.start_automation(mode, self.log, self.visual_state_manager.update_state)
 
     def stop_monitoring(self):
         self.automation_service.stop_automation()

@@ -7,7 +7,7 @@ class TextQueryService:
     Encapsulates the recursive text search logic from IDE mode.
     """
 
-    def has_text_recursive(self, control: Any, texts: List[str], max_depth: int = 3) -> bool:
+    def has_text_recursive(self, control: Any, texts: List[str], max_depth: int = 25) -> bool:
         """
         Recursively checks if any of the given texts exist in the control or its children.
         """
@@ -54,7 +54,7 @@ class TextQueryService:
         except Exception:
             return None
 
-    def dump_texts(self, control: Any, max_depth: int = 5) -> List[str]:
+    def dump_texts(self, control: Any, max_depth: int = 25) -> List[str]:
         """
         Dumps all text found in the control tree for debugging.
         """
