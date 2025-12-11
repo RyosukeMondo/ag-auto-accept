@@ -1,6 +1,3 @@
-import warnings
-# Suppress SyntaxWarning from pywinauto (invalid escape sequences in Python 3.12)
-warnings.filterwarnings("ignore", category=SyntaxWarning, module="pywinauto")
 
 import tkinter as tk
 from ag_accept.config import ConfigManager

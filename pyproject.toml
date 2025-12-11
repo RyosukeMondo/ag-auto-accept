@@ -7,7 +7,7 @@ name = "ag-accept"
 version = "0.1.0"
 description = "A lightweight tool to automatically accept antigravity windows."
 authors = [{ name = "RyosukeMondo" }]
-dependencies = ["pywinauto", "platformdirs"]
+dependencies = ["uiautomation", "platformdirs"]
 
 [project.scripts]
 ag-accept = "ag_accept.main:main"
