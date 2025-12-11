@@ -7,7 +7,17 @@ name = "ag-accept"
 version = "0.1.0"
 description = "A lightweight tool to automatically accept antigravity windows."
 authors = [{ name = "RyosukeMondo" }]
-dependencies = ["uiautomation", "platformdirs"]
+dependencies = [
+    "uiautomation",
+    "platformdirs",
+    "pywin32",
+    "injector",
+    "customtkinter",
+    "matplotlib",
+]
 
 [project.scripts]
 ag-accept = "ag_accept.main:main"
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-mock"]
