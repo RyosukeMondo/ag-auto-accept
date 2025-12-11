@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "setup .venv",
+            "type": "shell",
+            "command": "uv venv .venv; uv pip install -r requirements.txt",
+            "windows": {
+                "command": "uv venv .venv; uv pip install -r requirements.txt"
+            },
+            "problemMatcher": [],
+            "detail": "Create .venv and install dependencies using uv"
+        }
+    ]
+}
