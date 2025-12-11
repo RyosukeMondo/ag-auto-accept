@@ -1,6 +1,8 @@
 import time
 import os
 import uiautomation as auto
+import pythoncom
+
 from typing import Protocol, Any, Callable, List, Optional, Union
 import threading
 
@@ -95,13 +97,16 @@ class BaseStrategy:
 
 class IdeStrategy(BaseStrategy):
     def run(self, stop_event, snapshot_event, config_manager, logger, debug=False):
-        target_title_part = config_manager.get("target_window_title", "Antigravity")
-        search_texts = config_manager.get("search_texts_ide", ["Run command?", "Reject", "Accept"])
-        interval = config_manager.get("interval", 1.0)
+        # Initialize COM for this thread
+        pythoncom.CoInitialize()
+        try:
+            target_title_part = config_manager.get("target_window_title", "Antigravity")
+            search_texts = config_manager.get("search_texts_ide", ["Run command?", "Reject", "Accept"])
+            interval = config_manager.get("interval", 1.0)
 
-        logger("Starting IDE Strategy (uiautomation)...")
+            logger("Starting IDE Strategy (uiautomation)...")
 
-        while not stop_event.is_set():
+            while not stop_event.is_set():
             if debug and snapshot_event.is_set():
                 try:
                     all_windows = self.get_all_window_titles()
@@ -163,20 +168,24 @@ class IdeStrategy(BaseStrategy):
 
             if stop_event.wait(interval):
                 break
+        finally:
+            pythoncom.CoUninitialize()
 
 class AgentManagerStrategy(BaseStrategy):
     def run(self, stop_event, snapshot_event, config_manager, logger, debug=False):
-        target_title_part = config_manager.get("target_window_title", "Antigravity")
-        raw_search_texts = config_manager.get("search_texts_agent_manager", ["Accept"])
-        search_texts = [s.strip() for s in raw_search_texts if s]
-        context_texts = config_manager.get("context_text_agent_manager", ["Run command?"])
-        interval = config_manager.get("interval", 1.0)
-        
-        target_window = None
-        
-        logger(f"Waiting for target window '{target_title_part}'...")
+        pythoncom.CoInitialize()
+        try:
+            target_title_part = config_manager.get("target_window_title", "Antigravity")
+            raw_search_texts = config_manager.get("search_texts_agent_manager", ["Accept"])
+            search_texts = [s.strip() for s in raw_search_texts if s]
+            context_texts = config_manager.get("context_text_agent_manager", ["Run command?"])
+            interval = config_manager.get("interval", 1.0)
+            
+            target_window = None
+            
+            logger(f"Waiting for target window '{target_title_part}'...")
 
-        while not stop_event.is_set():
+            while not stop_event.is_set():
             # Snapshot logic
             if debug and snapshot_event.is_set():
                 try:
@@ -317,3 +326,5 @@ class AgentManagerStrategy(BaseStrategy):
                 target_window = None # Lost context probably
 
             stop_event.wait(interval)
+        finally:
+            pythoncom.CoUninitialize()
