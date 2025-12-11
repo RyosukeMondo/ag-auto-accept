@@ -1,11 +1,40 @@
 import time
 import os
 import uiautomation as auto
-from typing import Protocol, Any, Callable
+from typing import Protocol, Any, Callable, List, Optional, Union
 import threading
 
 # Configure uiautomation
 auto.SetGlobalSearchTimeout(1.0)  # Fast fail for checks
+
+class AutomationControl(Protocol):
+    """Abstract interface for a UI control."""
+    Name: str
+    ControlTypeName: str
+    BoundingRectangle: Any
+    AutomationId: str
+
+    def GetChildren(self) -> List['AutomationControl']: ...
+    def FindFirst(self, scope: Any, condition: Any) -> Optional['AutomationControl']: ...
+    def SetFocus(self) -> None: ...
+    def SendKeys(self, keys: str) -> None: ...
+    def Invoke(self) -> None: ...
+    def Click(self) -> None: ...
+    def Exists(self, timeout: int, interval: int) -> bool: ...
+
+class WindowProvider(Protocol):
+    """Abstract provider for window operations."""
+    def get_root_control(self) -> AutomationControl: ...
+    def create_name_condition(self, name: str, case_sensitive: bool = False) -> Any: ...
+    # Helper to expose uiautomation constants/types if needed, or abstract them
+    # For now we might leak some uiautomation types (like Scope) or wrap them.
+    # To keep it simple, we'll assume the strategies use the provider for factory methods 
+    # or we just mock the control objects returning specific attributes.
+
+class NativeAutomationProvider:
+    """Concrete implementation using uiautomation."""
+    def get_root_control(self) -> Any:
+        return auto.GetRootControl()
 
 class AutomationStrategy(Protocol):
     def run(self, stop_event: threading.Event, snapshot_event: threading.Event, config_manager: Any, logger: Callable[[str], None], debug: bool = False):
@@ -13,6 +42,9 @@ class AutomationStrategy(Protocol):
         ...
 
 class BaseStrategy:
+    def __init__(self, provider: WindowProvider):
+        self.provider = provider
+
     def get_window_structure(self, window, depth=0, max_depth=5):
         if depth > max_depth:
             return ""
@@ -39,6 +71,7 @@ class BaseStrategy:
             info = f"\n{indent}- [{control_type}] '{name}'{extra}"
             
             for child in window.GetChildren():
+                # Handling uiautomation child iteration vs list
                 info += self.get_window_structure(child, depth + 1, max_depth)
             
             return info
@@ -48,7 +81,7 @@ class BaseStrategy:
     def get_all_window_titles(self):
         titles = []
         try:
-            root = auto.GetRootControl()
+            root = self.provider.get_root_control()
             for window in root.GetChildren():
                 try:
                     name = window.Name
@@ -82,7 +115,7 @@ class IdeStrategy(BaseStrategy):
 
             try:
                 # Find all potential windows
-                root = auto.GetRootControl()
+                root = self.provider.get_root_control()
                 for window in root.GetChildren():
                     name = window.Name
                     # Basic filter to avoid our own window or irrelevant ones
@@ -167,7 +200,7 @@ class AgentManagerStrategy(BaseStrategy):
                 # 1. Find Target if lost
                 if not target_window or not target_window.Exists(0, 0):
                     target_window = None
-                    root = auto.GetRootControl()
+                    root = self.provider.get_root_control()
                     best_match = None
                     
                     for window in root.GetChildren():

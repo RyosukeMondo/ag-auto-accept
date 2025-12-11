@@ -2,13 +2,14 @@
 import tkinter as tk
 from ag_accept.config import ConfigManager
 from ag_accept.ui import AutoAccepterUI
-from ag_accept.automation import IdeStrategy, AgentManagerStrategy
+from ag_accept.automation import IdeStrategy, AgentManagerStrategy, NativeAutomationProvider
 
 def strategy_factory(mode):
+    provider = NativeAutomationProvider()
     if mode == "IDE":
-        return IdeStrategy()
+        return IdeStrategy(provider)
     elif mode == "AgentManager":
-        return AgentManagerStrategy()
+        return AgentManagerStrategy(provider)
     return None
 
 def main():
