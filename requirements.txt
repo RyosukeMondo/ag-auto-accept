@@ -1,3 +1,8 @@
 uiautomation
 platformdirs
 pywin32
+injector
+pytest
+pytest-mock
+customtkinter
+matplotlib
