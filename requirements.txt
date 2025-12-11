@@ -1,1 +1,3 @@
 pywinauto
+platformdirs
+pywin32

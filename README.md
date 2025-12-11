@@ -20,7 +20,10 @@ ag-accept
 
 ## Features
 
-- Lightweight GUI
+- lightweight GUI
 - Dark/Light mode support
 - Configurable monitoring interval
+- Dual Modes:
+    - **IDE Mode**: For regular Antigravity IDE usage (sends Alt+Enter).
+    - **AgentManager Mode**: For watching AgentManager windows (clicks "Accept" button).
 - Auto-accept functionality for "Antigravity" windows
